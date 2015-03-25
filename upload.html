@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>上传图片</title>
+	<style>
+		body{
+			-webkit-user-select:​ none;
+		}
+		.box{
+			float:left;
+			width:360px;
+			height: 360px;
+			line-height: 360px;
+			background-color:#eee;
+			color:#000;
+			text-align:center;
+			-webkit-box-sizing: border-box;
+			box-sizing : border-box;
+		}
+		.avatar_wrap{
+			float:left;
+		}
+		.box.hover{	
+			border:1px solid #999;
+		}
+		.canvas_wrap{
+			position: relative;
+			width:360px;
+			height: 360px;
+		}
+		.canvas_wrap canvas{
+		
+			position: absolute;
+			left:0;
+			top:0;
+			
+		}
+		.canvas_wrap canvas:first-child{
+			z-index:1;
+		}
+		.canvas_wrap canvas:last-child{
+			z-index:2;
+		}
+		.box_wrap{
+			overflow: hidden;
+		}
+		.avatar_canvas_wrap{
+			margin-left:50px;
+			text-align: center;
+		}
+		.avatar_canvas_wrap canvas{
+			margin-bottom: 10px;
+		}
+	</style>
+</head>
+<body>
+	<img src="" id="youravatar" width="40" height="40" alt="" /><br>
+	姓名<input type="text" id="yourname"><br>
+	id<input type="text" id="yourid"><br>
+	<!-- <iframe src="/uploadAvatar" frameborder="0"></iframe> -->
+
+	<input type="file" id="avatar" name="avatar" multiple/>
+    <input type="button" id="upload" value="upload">
+
+	<div class="box_wrap">
+		<div class="box">
+			将文件拖拽到这里
+		</div>
+
+		<div class="avatar_wrap">
+			<div  class="avatar_canvas_wrap">
+			<!-- 	<img id="avatar100" width="100" height="100" alt=""><br> -->
+				<canvas id="avatar100" width="100" height="100"></canvas>
+				100 * 100
+			</div>
+			<div  class="avatar_canvas_wrap">
+				<!-- <img id="avatar40" width="40" height="40" alt=""><br> -->
+				<canvas id="avatar40" width="40" height="40"></canvas>
+				40 * 40
+			</div>
+		</div>
+	</div>
+	<a href="/logout">注销</a>
+	<hr>
+
+</body>
+<script src="js/jquery.min.js"></script>
+<script>
+
+
+	$("#upload").click(function(e){
+
+		$.post("/uploadAvatar",{
+
+			avatar:virturlCanvas.toDataURL()
+
+		},function(data){
+
+			alert(data.msg);
+			
+		});
+	});
+
+	var ctx_avatar100 = avatar100.getContext("2d");
+	var ctx_avatar40 = avatar40.getContext("2d");
+
+	$.get("/getLoginInfo",function(data){
+		data = data.user;
+		youravatar.src = data.avatar;
+		youravatar.onload = function(){
+			ctx_avatar100.drawImage(youravatar,0,0,clipInfo.width,clipInfo.height,0,0,100,100);
+			ctx_avatar40.drawImage(youravatar,0,0,clipInfo.width,clipInfo.height,0,0,40,40);
+		};
+		yourname.value = data.name;
+		yourid.value = data.id;
+	});
+
+	var box = $(".box");
+
+	var nativewidth = 360,
+		nativeheight = 360;
+
+	var canvas_bg, 
+		canvas_bg_postion,
+		canvas_filter,
+		canvas_filter_postion,
+		ctx,
+		filterCtx,
+		corners, //4个角的信息
+		selectCorner, //选中的角
+		filterMinSize = 40,
+		filterMaxSize = 0,
+		clipInfo = {
+			x : 0,
+			y : 0 ,
+			width : 100 ,
+			height : 100
+		},
+		moving = false,
+		startX,
+		startY,
+		scaling = false,
+		clickX,
+		state, //scale move
+		clickY,
+		uploadImg = new Image(); //上传的图片
+
+
+	function getPostion(elm){
+
+		var temp = {
+			x : 0,
+			y : 0
+		}
+		while(elm != document.body){
+			temp.x = temp.x + elm.offsetLeft;
+			temp.y = temp.y + elm.offsetTop;
+			elm = elm.offsetParent;
+		}
+		return temp;
+	}
+
+	box.on({
+
+		"dragover" : function(e){
+			e.preventDefault();
+			box.addClass("hover");
+		},
+
+		"dragleave" : function(e){
+
+			e.preventDefault();
+
+			box.removeClass("hover");
+
+		},
+
+		"drop" : function(e){
+
+			e = e.originalEvent;
+
+			e.preventDefault();
+
+			box.removeClass("hover");
+
+			box.html('<div class="canvas_wrap"></div>');
+
+			// 获取文件列表对象
+			var files = e.target.files || e.dataTransfer.files;
+
+			console.log(files);
+
+			var html ="";
+
+			var count = 0; 
+
+			var file = files[0];
+
+			var reader = new FileReader();
+
+			reader.onload = function(e) {
+	
+				uploadImg.src = e.target.result;
+
+				var newWidth , newHeight;
+
+				var scale = uploadImg.width / uploadImg.height;
+
+				if(scale > 1){ //则以宽为标准 
+
+					newWidth = 360;
+
+					newHeight = Math.floor(newWidth/scale);
+
+					filterMaxSize = newHeight; //能裁剪的最大长度
+
+				}else{
+
+					newHeight = 360;
+
+					newWidth = Math.floor(newHeight * scale);
+
+					filterMaxSize = newWidth; //能裁剪的最大长度
+
+				}
+
+				uploadImg.width = newWidth;
+
+				uploadImg.height = newHeight;
+
+				canvas_bg = document.createElement("canvas"),
+
+				canvas_filter = document.createElement("canvas");
+
+				canvas_bg.width = newWidth;
+
+				canvas_bg.height = newHeight;
+
+				canvas_filter.width = newWidth;
+
+				canvas_filter.height = newHeight;
+
+				$(".canvas_wrap").append(canvas_bg).append(canvas_filter);
+
+				ctx = canvas_bg.getContext("2d");
+
+				ctx.drawImage(uploadImg,0,0,newWidth,newHeight);
+
+				uploadImg.src = canvas_bg.toDataURL(); // important 设置width和height和，页面上显示会缩小，但是图片的原始数据没变，如果裁剪时，依旧使用这个uploadImg，他计算裁剪数据时是以未缩放的数据进行计算就会有问题。
+
+				filterCtx = canvas_filter.getContext("2d");
+
+				clipInfo.x = newWidth / 2 - 30 ;
+
+				clipInfo.y = newHeight / 2 - 30 ;
+
+				drawFilter(clipInfo.x, clipInfo.y, clipInfo.width ,clipInfo.height);
+
+				canvas_filter_postion = getPostion(canvas_filter);
+
+				showAvatar();
+
+				canvas_filter.addEventListener("mousedown",function(e){
+
+					startX = e.pageX,
+
+					startY = e.pageY;
+
+					clickX = startX - canvas_filter_postion.x;
+
+					clickY = startY - canvas_filter_postion.y;
+
+					/* 检查是否点击了缩放按钮 */
+					corners.forEach(function(corner,i){
+
+						filterCtx.beginPath();
+
+						filterCtx.arc(corner.x,corner.y,5,0,Math.PI*2);
+
+						if(filterCtx.isPointInPath(clickX,clickY)){
+
+							scaling = true ;
+
+							selectCorner =  i;
+
+							return false;
+						}
+
+						filterCtx.closePath();
+
+					});
+
+					if(!scaling){
+
+						/* 检查是否在裁剪区域内 */
+						filterCtx.beginPath();
+
+						filterCtx.rect(clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height);
+
+						if(filterCtx.isPointInPath(clickX,clickY)){
+
+							moving = true;
+
+						}
+
+						filterCtx.closePath();
+						
+					}
+					
+				});
+
+				canvas_filter.addEventListener("mousemove",function(e){
+
+					if(scaling){
+
+						scaleFilter(e);
+
+						showAvatar();
+
+					}
+
+					if(moving){
+
+						moveFilter(e);
+
+						showAvatar();
+					}
+
+
+				});
+				document.body.addEventListener("mouseup",function(e){
+
+					moving = false;
+
+					scaling = false;
+
+				});
+
+			}
+			reader.readAsDataURL(file);
+
+		}
+
+	});
+	
+	function scaleFilter(e){
+
+		var nowX = e.pageX, 
+
+			nowY = e.pageY,
+
+			moveX = nowX - startX, //横向移动的距离
+
+			moveY = nowY - startY; //纵向移动的距离
+
+		startX = nowX;
+
+		startY = nowY;
+
+		var len = Math.floor(Math.sqrt(Math.pow(moveX,2) + Math.pow(moveY,2)));	// 增加或减少的长度
+
+		var direct;
+		//四个角的顺序是 从左上开始，顺时针 分别对应 0,1,2,3。方向亦如此。
+		//根据移动的方向，和选中的角判断出是缩放还是扩大
+		if(moveX <= 0 && moveY <= 0){
+
+			direct = 0; 
+
+		}else if(moveX >= 0 && moveY <= 0){
+
+			direct = 1;
+
+		}else if(moveX >=0 && moveY >=0){
+
+			direct = 2;
+
+		}else if(moveX <= 0 && moveY >= 0){
+
+			direct = 3;
+
+		}
+
+		if(direct == selectCorner){//扩大
+
+			clipInfo.width += len ;
+
+			clipInfo.height += len ;
+
+			// if(clipInfo.width > filterMaxSize){
+
+			// 	clipInfo.width = filterMaxSize;
+
+			// 	clipInfo.height = filterMaxSize;
+
+			// }
+
+		}else if(Math.abs(direct - selectCorner) == 2) { // 缩小
+
+		 	clipInfo.width -= len ;
+
+		 	clipInfo.height -= len ;
+		 	// 缩小的情况是不可能超过边界的 所以直接判断长度小于最小长度即可
+		 	if(clipInfo.width < filterMinSize){
+
+		 		clipInfo.width = filterMinSize;
+
+		 		clipInfo.height = filterMinSize;
+
+		 	}
+
+		}
+
+		var noMovePoint; //选中角的对角，即坐标不会改变的那个角
+
+		//求得坐标不会变的那个角 那个角即为选中角的对角
+		if(selectCorner + 2 > 3){
+
+			noMovePoint = (selectCorner + 2)%4;
+
+		}else{
+
+			noMovePoint = selectCorner + 2;
+
+		}
+
+		if(noMovePoint == 0 ){
+
+			clipInfo.x = corners[noMovePoint].x;
+
+			clipInfo.y = corners[noMovePoint].y; 
+
+		}else if(noMovePoint ==1){
+
+			clipInfo.x = corners[noMovePoint].x - clipInfo.width;
+
+			clipInfo.y = corners[noMovePoint].y; 
+
+		}else if(noMovePoint ==2){
+
+			clipInfo.x = corners[noMovePoint].x - clipInfo.width;
+
+			clipInfo.y = corners[noMovePoint].y - clipInfo.height ;
+
+
+		}else if(noMovePoint ==3){
+
+			clipInfo.x = corners[noMovePoint].x;
+
+			clipInfo.y = corners[noMovePoint].y - clipInfo.height; 
+
+		}
+
+		drawFilter(clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height);
+		
+	}
+
+	function moveFilter(e){
+
+		var nowX = e.pageX, 
+
+			nowY = e.pageY,
+
+			moveX = nowX - startX, //横向移动的距离
+
+			moveY = nowY - startY; //纵向移动的距离
+
+		clipInfo.x = clipInfo.x + moveX;
+
+		clipInfo.y = clipInfo.y + moveY;
+
+		startX = nowX;
+
+		startY = nowY;
+
+		if(clipInfo.x < 0){
+			
+			clipInfo.x = 0 ;
+
+		}
+		if(clipInfo.x + clipInfo.width > canvas_filter.width ){
+
+			clipInfo.x = canvas_filter.width - clipInfo.width ;	
+
+		}
+		if(clipInfo.y < 0){
+			
+			clipInfo.y = 0 ;
+
+		}
+		if(clipInfo.y + clipInfo.height > canvas_filter.height ){
+
+			clipInfo.y = canvas_filter.height - clipInfo.height;	
+			
+		}
+
+		drawFilter(clipInfo.x, clipInfo.y, clipInfo.width ,clipInfo.height);
+
+	}
+
+	function drawFilter(x,y,width,height){
+
+		corners = [{
+			x : x , 
+			y : y
+		},{
+			x : x + width,
+			y : y
+		},{
+			x : x + width,
+			y : y + height			
+		},{
+			x : x ,
+			y : y + height
+		}];
+
+		// /* 对参数进行检测 */
+		if(corners[0].x < 0){
+
+			clipInfo.x = 0;
+
+			clipInfo.width = corners[2].x - 0;
+
+			clipInfo.height = clipInfo.width;
+
+			drawFilter(clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height);
+
+			return ;
+		}
+		if(corners[0].y < 0){
+
+			clipInfo.y = 0 ;
+
+			clipInfo.width = corners[2].y - 0;
+
+			clipInfo.height = clipInfo.width;
+
+			drawFilter(clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height);
+
+			return;
+		}
+
+		if(corners[2].x > canvas_filter.width){
+
+			clipInfo.width = canvas_filter.width- clipInfo.x;
+
+			clipInfo.height = clipInfo.width;
+
+			drawFilter(clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height);
+
+			return;
+		}
+
+		if(corners[2].y > canvas_filter.height){
+
+			clipInfo.height = canvas_filter.height - clipInfo.y;
+
+			clipInfo.width = clipInfo.height;
+
+			drawFilter(clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height);
+
+			return;
+		}
+
+		filterCtx.clearRect(0,0,canvas_filter.width,canvas_filter.height);
+
+		filterCtx.beginPath();
+
+		filterCtx.globalAlpha= 0.5;
+
+		filterCtx.rect(0,0,canvas_filter.width,canvas_filter.height);
+
+		filterCtx.fillStyle = "#fff";
+
+		filterCtx.fill();
+
+		filterCtx.closePath();
+
+		filterCtx.clearRect(x,y,width,height);
+
+
+		
+		filterCtx.globalAlpha= 1; 
+
+		corners.forEach(function(corner,i){
+
+			filterCtx.beginPath();
+
+			filterCtx.arc(corner.x,corner.y,5,0,Math.PI*2);
+
+			filterCtx.fillStyle = "#fff";
+
+			filterCtx.fill();
+
+			filterCtx.closePath();
+
+		});
+
+	}
+
+	function showAvatar(){
+
+		ctx_avatar100.drawImage(uploadImg,clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height,0,0,100,100);
+
+		ctx_avatar40.drawImage(uploadImg,clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height,0,0,40,40);
+	}
+
+	// var clipCanvas = document.createElement("canvas");
+
+	// var clipCtx = clipCanvas.getContext("2d");
+
+	// var virturlCanvas = document.createElement("canvas");
+
+	// var virturlCtx = virturlCanvas.getContext("2d");
+
+	// var virturlImg = new Image();
+
+	// virturlCanvas.width = 100;
+
+	// virturlCanvas.height = 100;
+
+	 
+	// 	裁剪思路
+	// 	先根据clipinfo里面的信息 从canvas_bg上通过getImageData得到裁剪区域的数据
+
+	// 	然后将这个数据放到一个新的canvas（clipCanvas）中去，clipCanvas的长宽和裁剪区域长宽一样
+
+	// 	然后通过clipCanvas.toDataURL，得到virturlImg的src。
+
+	// 	最后通过drawImage的方法，把virturlImg上的图放到长宽都为100的virturlCanvas中。
+	// 	virturlCanvas中的图片即为我们最终要的图片。
+
+	
+
+	// function showAvatar(){
+
+	// 	var avatarData = ctx.getImageData(clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height);
+
+	// 	clipCanvas.width = clipInfo.width;
+
+	// 	clipCanvas.height = clipInfo.height;
+
+	// 	clipCtx.putImageData(avatarData,0,0,0,0,clipInfo.width,clipInfo.height);
+
+	// 	virturlImg.src = clipCanvas.toDataURL();
+
+	// 	virturlCtx.drawImage(virturlImg,0,0,clipInfo.width,clipInfo.height,0,0,100,100);
+
+
+	// 	var src = virturlCanvas.toDataURL();
+
+	// 	avatar40.src = src;
+
+	// 	avatar100.src = src;
+
+	// }
+</script>
+</html>
