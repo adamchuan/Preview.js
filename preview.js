@@ -21,19 +21,40 @@ var preview = function(config){
 
 	this.canvasFilter = document.createElement("canvas"); //选择框canvas
 
+	this.canvasShow = document.createElement("canvas");
+
+	this.clipInfo = {
+
+		x : 0,
+
+		y : 0 ,
+
+		width : 100 ,
+
+		height : 100
+
+	}
+
+	movecb = config.cb;
+
 	var self = this;
 
 	var filterCtx = this.canvasFilter.getContext("2d");
 
 	var bgCtx = this.canvasBg.getContext("2d");
 
-	var clipInfo = { // 裁剪的参数
-		x : 0,
-		y : 0 ,
-		width : 100 ,
-		height : 100
-	}
-	filterMinSize = 40;
+	var clipInfo = this.clipInfo;
+
+	var dragBox = this.dragBox;
+
+	var uploadImg = this.uploadImg;
+
+	var canvasBg = this.canvasBg;
+
+	var canvasFilter = this.canvasFilter;
+
+	var filterMinSize = 40;
+
 	bindDragEvent();
 
 	function getPostion(elm){
@@ -51,8 +72,6 @@ var preview = function(config){
 	}
 
 	function bindDragEvent(){
-
-		var dragBox = self.dragBox;
 
 		dragBox.addEventListener("dragover",function(e){
 
@@ -103,9 +122,7 @@ var preview = function(config){
 
 	function viewUploadImage(){
 
-		self.dragBox.innerHTML = ""; //清空dragBox
-
-		var uploadImg = self.uploadImg;
+		dragBox.innerHTML = ""; //清空dragBox
 
 		var scale = uploadImg.width / uploadImg.height;
 
@@ -133,17 +150,17 @@ var preview = function(config){
 
 		uploadImg.height = newHeight;
 
-		self.canvasBg.width = newWidth;
+		canvasBg.width = newWidth;
 
-		self.canvasBg.height = newHeight;
+		canvasBg.height = newHeight;
 
-		self.canvasFilter.width = newWidth;
+		canvasFilter.width = newWidth;
 
-		self.canvasFilter.height = newHeight;
+		canvasFilter.height = newHeight;
 
-		self.dragBox.appendChild(self.canvasBg);
+		dragBox.appendChild(self.canvasBg);
 
-		self.dragBox.appendChild(self.canvasFilter);
+		dragBox.appendChild(self.canvasFilter);
 
 		bgCtx.drawImage(uploadImg,0,0,newWidth,newHeight);
 
@@ -177,7 +194,6 @@ var preview = function(config){
 			/* 检查是否点击了缩放按钮 */
 			corners.forEach(function(corner,i){
 
-				
 				filterCtx.beginPath();
 
 				filterCtx.arc(corner.x,corner.y,5,0,Math.PI*2);
@@ -228,6 +244,7 @@ var preview = function(config){
 
 			}
 
+			movecb();
 
 		});
 		document.body.addEventListener("mouseup",function(e){
@@ -394,8 +411,6 @@ var preview = function(config){
 
 	}
 
-
-
 	function drawFilter(x,y,width,height){
 
 		corners = [{
@@ -492,8 +507,25 @@ var preview = function(config){
 
 			filterCtx.closePath();
 
-		});
+		}); //回执裁剪的框
 
 	}
 	
+}
+preview.prototype.getClipBase64 = function () {
+	
+	var canvasShow = this.canvasShow;
+
+	var clipInfo = this.clipInfo;
+
+	var ctx = canvasShow.getContext("2d");
+
+	canvasShow.width = clipInfo.width;
+
+	canvasShow.height = clipInfo.height;
+
+	ctx.drawImage(this.uploadImg,clipInfo.x,clipInfo.y,clipInfo.width,clipInfo.height,0,0,clipInfo.width,clipInfo.height);
+
+	return canvasShow.toDataURL();
+
 }
