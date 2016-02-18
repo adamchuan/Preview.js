@@ -8,34 +8,21 @@ var preview = function(config){
 	}
 
 	this.dragBox = config.dragBox ; //拖动响应的区域 响应之后会在这个区域生成预览和裁剪的canvas
-
 	this.fileInput = config.fileInput; //上传的按钮
-
 	this.width = 200; //
-
 	this.height = 200; //
-
 	this.uploadImg = new Image();
-
 	this.canvasBg = document.createElement("canvas"); //背景canvas
-
 	this.canvasFilter = document.createElement("canvas"); //选择框canvas
-
 	this.canvasShow = document.createElement("canvas");
-
 	this.clipInfo = {
-
 		x : 0,
-
 		y : 0 ,
-
 		width : 100 ,
-
 		height : 100
-
 	}
 
-	movecb = config.cb;
+	actioncb = config.actioncb;
 
 	var self = this;
 
@@ -169,6 +156,10 @@ var preview = function(config){
 		drawFilter(clipInfo.x, clipInfo.y, clipInfo.width ,clipInfo.height);
 
 		addMoveLisenter();
+
+		if(actioncb){
+			actioncb();
+		}
 	}
 
 	function addMoveLisenter(){
@@ -233,24 +224,21 @@ var preview = function(config){
 		self.canvasFilter.addEventListener("mousemove",function(e){
 
 			if(scaling){
-
 				scaleFilter(e);
-
 			}
 
 			if(moving){
-
 				moveFilter(e);
-
 			}
 
-			movecb();
+			if(actioncb){
+				actioncb();
+			}
 
 		});
 		document.body.addEventListener("mouseup",function(e){
 
 			moving = false;
-
 			scaling = false;
 
 		});
